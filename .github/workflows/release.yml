@@ -1,0 +1,54 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - new-index
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang libclang-dev pkg-config
+
+      - name: Build release binary
+        run: cargo build --release
+
+      - name: Package binary
+        run: |
+          SHORT_SHA="${GITHUB_SHA::8}"
+          ARCHIVE="electrs-mewc-linux-x86_64-${SHORT_SHA}.tar.gz"
+          cp target/release/electrs electrs-mewc
+          tar czf "$ARCHIVE" electrs-mewc
+          echo "ARCHIVE=$ARCHIVE" >> "$GITHUB_ENV"
+          echo "SHORT_SHA=$SHORT_SHA" >> "$GITHUB_ENV"
+
+      - name: Publish rolling release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Delete and recreate the rolling 'latest' release so there's always one fresh build
+          gh release delete latest --yes 2>/dev/null || true
+          git push origin :refs/tags/latest 2>/dev/null || true
+
+          gh release create latest \
+            --title "Latest build (${SHORT_SHA})" \
+            --notes "$(printf 'Automated release build from commit %s\n\nBranch: %s\nDate: %s\n\n### Usage\n```\ntar xzf %s\n./electrs-mewc --network mainnet --jsonrpc-import ...\n```' \
+              "$GITHUB_SHA" "$GITHUB_REF_NAME" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$ARCHIVE")" \
+            --prerelease \
+            "$ARCHIVE"

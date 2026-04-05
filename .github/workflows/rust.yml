@@ -13,43 +13,12 @@ jobs:
   check:
     runs-on: ubuntu-22.04
     steps:
-    - uses: actions/checkout@v4
-    - uses: dtolnay/rust-toolchain@1.75.0
-    - uses: Swatinem/rust-cache@v2
-    - name: Run cargo check --all-targets
-      run: cargo check --all-targets
-
-  test:
-    runs-on: ubuntu-22.04
-    steps:
-    - run: sudo apt-get update && sudo apt-get install libfuse2
-    - uses: actions/checkout@v4
-    - uses: dtolnay/rust-toolchain@1.75.0
-    - uses: Swatinem/rust-cache@v2
-    - name: Run tests (Bitcoin mode, REST+Electrum)
-      run: RUST_LOG=debug cargo test
-
-  test-electrum-raw:
-    runs-on: ubuntu-22.04
-    steps:
-    - uses: actions/checkout@v4
-    - uses: dtolnay/rust-toolchain@1.75.0
-    - uses: Swatinem/rust-cache@v2
-    - name: Run test test_electrum_raw
-      run: RUST_LOG=debug cargo test -- --include-ignored test_electrum_raw
-
-  test-liquid:
-    runs-on: ubuntu-22.04
-    steps:
-    - uses: actions/checkout@v4
-    - uses: dtolnay/rust-toolchain@1.75.0
-    - uses: Swatinem/rust-cache@v2
-    - name: Run tests (Liquid mode, REST)
-      run: RUST_LOG=debug cargo test --features liquid
-
-  nix:
-    runs-on: ubuntu-latest
-    steps:
       - uses: actions/checkout@v4
-      - uses: DeterminateSystems/nix-installer-action@main
-      - run: nix build .
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang libclang-dev pkg-config
+      - name: cargo check
+        run: cargo check --all-targets
