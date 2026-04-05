@@ -912,6 +912,7 @@ dependencies = [
  "arraydeque",
  "arrayref",
  "base64 0.22.1",
+ "bech32 0.11.1",
  "bincode",
  "bitcoin 0.32.8",
  "bitcoin-test-data",

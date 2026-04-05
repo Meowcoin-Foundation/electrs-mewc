@@ -15,10 +15,7 @@ use error_chain::ChainedError;
 use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
 use serde_json::{from_str, from_value, Value};
 
-#[cfg(not(feature = "liquid"))]
 use bitcoin::consensus::encode::{deserialize, serialize_hex};
-#[cfg(feature = "liquid")]
-use elements::encode::{deserialize, serialize_hex};
 
 use electrs_macros::trace;
 
@@ -58,22 +55,20 @@ where
     .chain_err(|| format!("non-hex value: {}", value))?)
 }
 
-#[trace]
-fn header_from_value(value: Value) -> Result<BlockHeader> {
+fn header_from_value(hash: BlockHash, value: Value) -> Result<BlockHeader> {
     let header_hex = value
         .as_str()
         .chain_err(|| format!("non-string header: {}", value))?;
     let header_bytes = Vec::from_hex(header_hex).chain_err(|| "non-hex header")?;
-    Ok(
-        deserialize(&header_bytes)
-            .chain_err(|| format!("failed to parse header {}", header_hex))?,
-    )
+    crate::meowcoin::deserialize_header(hash, &header_bytes)
+        .chain_err(|| format!("failed to parse header {}", header_hex))
 }
 
-fn block_from_value(value: Value) -> Result<Block> {
+fn block_from_value(hash: BlockHash, value: Value) -> Result<Block> {
     let block_hex = value.as_str().chain_err(|| "non-string block")?;
     let block_bytes = Vec::from_hex(block_hex).chain_err(|| "non-hex block")?;
-    Ok(deserialize(&block_bytes).chain_err(|| format!("failed to parse block {}", block_hex))?)
+    crate::meowcoin::deserialize_block(hash, &block_bytes)
+        .chain_err(|| format!("failed to parse block {}", block_hex))
 }
 
 fn tx_from_value(value: Value) -> Result<Transaction> {
@@ -574,30 +569,38 @@ impl Daemon {
 
     #[trace]
     pub fn getblockheader(&self, blockhash: &BlockHash) -> Result<BlockHeader> {
-        header_from_value(self.request("getblockheader", json!([blockhash, /*verbose=*/ false]))?)
+        header_from_value(*blockhash, self.request("getblockheader", json!([blockhash, /*verbose=*/ false]))?)
     }
 
     #[trace]
     pub fn getblockheaders(&self, heights: &[usize]) -> Result<Vec<BlockHeader>> {
-        let heights: Vec<Value> = heights.iter().map(|height| json!([height])).collect();
-        let params_list: Vec<Value> = self
-            .requests("getblockhash", heights)?
-            .into_iter()
+        let height_params: Vec<Value> = heights.iter().map(|h| json!([h])).collect();
+        let hash_values = self.requests("getblockhash", height_params)?;
+
+        // Keep the hashes for passing to header_from_value (cannot compute from bytes for MEOWPOW).
+        let hashes: Vec<BlockHash> = hash_values
+            .iter()
+            .map(|v| parse_hash::<BlockHash>(v))
+            .collect::<Result<_>>()?;
+
+        let header_params: Vec<Value> = hashes
+            .iter()
             .map(|hash| json!([hash, /*verbose=*/ false]))
             .collect();
-        let mut result = vec![];
-        for h in self.requests("getblockheader", params_list)? {
-            result.push(header_from_value(h)?);
-        }
-        Ok(result)
+
+        self.requests("getblockheader", header_params)?
+            .into_iter()
+            .zip(hashes)
+            .map(|(header_val, hash)| header_from_value(hash, header_val))
+            .collect()
     }
 
     #[trace]
     pub fn getblock(&self, blockhash: &BlockHash) -> Result<Block> {
-        let block =
-            block_from_value(self.request("getblock", json!([blockhash, /*verbose=*/ false]))?)?;
-        assert_eq!(block.block_hash(), *blockhash);
-        Ok(block)
+        block_from_value(
+            *blockhash,
+            self.request("getblock", json!([blockhash, /*verbose=*/ false]))?,
+        )
     }
 
     #[trace]
@@ -636,8 +639,8 @@ impl Daemon {
             std::thread::sleep(RETRY_WAIT_DURATION);
         };
         let mut blocks = vec![];
-        for value in values {
-            blocks.push(block_from_value(value)?);
+        for (hash, value) in blockhashes.iter().zip(values) {
+            blocks.push(block_from_value(*hash, value)?);
         }
         Ok(blocks)
     }
@@ -789,9 +792,13 @@ impl Daemon {
             );
         }
 
+        // Verify chain connectivity using stored hashes (MEOWPOW hashes are provided by RPC).
         let mut blockhash = *DEFAULT_BLOCKHASH;
         for header in &result {
-            assert_eq!(header.prev_blockhash, blockhash);
+            assert_eq!(
+                header.prev_blockhash, blockhash,
+                "chain broken at height {}", header.time
+            );
             blockhash = header.block_hash();
         }
         assert_eq!(blockhash, *tip);

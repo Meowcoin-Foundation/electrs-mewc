@@ -1183,9 +1183,20 @@ impl ChainQuery {
         let blockid = self.tx_confirming_block(txid)?;
         let headerentry = self.header_by_hash(&blockid.hash)?;
         let block_txids = self.get_block_txids(&blockid.hash)?;
-
+        let h = headerentry.header();
+        // MerkleBlock requires a standard bitcoin::block::Header. We reconstruct one from the
+        // Meowcoin header fields. The computed block_hash() will differ from the actual Meowcoin
+        // hash (which uses MEOWPOW), but the merkle proof inside the MerkleBlock is still valid.
+        let btc_header = bitcoin::block::Header {
+            version: bitcoin::block::Version::from_consensus(h.version),
+            prev_blockhash: h.prev_blockhash,
+            merkle_root: h.merkle_root,
+            time: h.time,
+            bits: bitcoin::pow::CompactTarget::from_consensus(h.bits),
+            nonce: h.nonce,
+        };
         Some(MerkleBlock::from_header_txids_with_predicate(
-            headerentry.header(),
+            &btc_header,
             &block_txids,
             |t| t == txid,
         ))
@@ -1219,7 +1230,10 @@ fn load_blockheaders(db: &DB) -> HashMap<BlockHash, BlockHeader> {
         .map(BlockRow::from_row)
         .map(|r| {
             let key: BlockHash = deserialize(&r.key.hash).expect("failed to parse BlockHash");
-            let value: BlockHeader = deserialize(&r.value).expect("failed to parse BlockHeader");
+            // Re-supply the RPC hash from the DB key when reconstructing the header, since
+            // MEOWPOW block hashes cannot be recomputed from raw bytes.
+            let value: BlockHeader = crate::meowcoin::deserialize_header(key, &r.value)
+                .expect("failed to parse BlockHeader");
             (key, value)
         })
         .collect()

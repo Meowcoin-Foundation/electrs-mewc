@@ -9,8 +9,8 @@ use crate::new_index::{compute_script_hash, Query, SpendingInput, Utxo};
 use crate::util::optional_value_for_newer_blocks;
 use crate::util::{
     create_socket, electrum_merkle, extract_tx_prevouts, get_innerscripts, get_tx_fee, has_prevout,
-    is_coinbase, BlockHeaderMeta, BlockId, FullHash, ScriptToAddr, ScriptToAsm, TransactionStatus,
-    DEFAULT_BLOCKHASH,
+    is_coinbase, meowcoin_address_to_script, BlockHeaderMeta, BlockId, FullHash, ScriptToAddr,
+    ScriptToAsm, TransactionStatus, DEFAULT_BLOCKHASH,
 };
 #[cfg(not(feature = "liquid"))]
 use bitcoin::consensus::encode;
@@ -79,16 +79,9 @@ struct BlockValue {
     previousblockhash: Option<BlockHash>,
     mediantime: u32,
 
-    #[cfg(not(feature = "liquid"))]
     nonce: u32,
-    #[cfg(not(feature = "liquid"))]
-    bits: bitcoin::pow::CompactTarget,
-    #[cfg(not(feature = "liquid"))]
+    bits: u32,
     difficulty: f64,
-
-    #[cfg(feature = "liquid")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    ext: Option<elements::BlockExtData>,
 }
 
 impl BlockValue {
@@ -98,10 +91,7 @@ impl BlockValue {
         BlockValue {
             id: header.block_hash(),
             height: blockhm.header_entry.height() as u32,
-            #[cfg(not(feature = "liquid"))]
-            version: header.version.to_consensus() as u32,
-            #[cfg(feature = "liquid")]
-            version: header.version,
+            version: header.version as u32,
             timestamp: header.time,
             tx_count: blockhm.meta.tx_count,
             size: blockhm.meta.size,
@@ -113,16 +103,9 @@ impl BlockValue {
                 None
             },
             mediantime: blockhm.mtp,
-
-            #[cfg(not(feature = "liquid"))]
             bits: header.bits,
-            #[cfg(not(feature = "liquid"))]
             nonce: header.nonce,
-            #[cfg(not(feature = "liquid"))]
             difficulty: header.difficulty_float(),
-
-            #[cfg(feature = "liquid")]
-            ext: Some(header.ext.clone()),
         }
     }
 }
@@ -1346,25 +1329,9 @@ fn to_scripthash(
 }
 
 fn address_to_scripthash(addr: &str, network: Network) -> Result<FullHash, HttpError> {
-    #[cfg(not(feature = "liquid"))]
-    let addr = address::Address::from_str(addr)?;
-    #[cfg(feature = "liquid")]
-    let addr = address::Address::parse_with_params(addr, network.address_params())?;
-
-    #[cfg(not(feature = "liquid"))]
-    let is_expected_net = addr.is_valid_for_network(network.into());
-
-    #[cfg(feature = "liquid")]
-    let is_expected_net = addr.params == network.address_params();
-
-    if !is_expected_net {
-        bail!(HttpError::from("Address on invalid network".to_string()))
-    }
-
-    #[cfg(not(feature = "liquid"))]
-    let addr = addr.assume_checked();
-
-    Ok(compute_script_hash(&addr.script_pubkey()))
+    let script = meowcoin_address_to_script(addr, network)
+        .ok_or_else(|| HttpError::from("Invalid Meowcoin address".to_string()))?;
+    Ok(compute_script_hash(&script))
 }
 
 fn parse_scripthash(scripthash: &str) -> Result<FullHash, HttpError> {

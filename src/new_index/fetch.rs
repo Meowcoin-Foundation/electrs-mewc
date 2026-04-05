@@ -3,7 +3,7 @@ use rayon::prelude::*;
 #[cfg(feature = "liquid")]
 use crate::elements::ebcompact::*;
 #[cfg(not(feature = "liquid"))]
-use bitcoin::consensus::encode::{deserialize, Decodable};
+use bitcoin::consensus::encode::Decodable;
 #[cfg(feature = "liquid")]
 use elements::encode::{deserialize, Decodable};
 
@@ -297,7 +297,9 @@ fn parse_blocks(pool: &rayon::ThreadPool, blob: Vec<u8>, magic: u32) -> Result<V
     Ok(pool.install(|| {
         slices
             .into_par_iter()
-            .map(|(slice, size)| (deserialize(slice).expect("failed to parse Block"), size))
+            .map(|(_slice, _size)| -> (Block, u32) {
+                panic!("Direct blk*.dat parsing is not supported for Meowcoin. Use --jsonrpc-import mode.")
+            })
             .collect()
     }))
 }

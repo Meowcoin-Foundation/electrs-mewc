@@ -18,6 +18,7 @@ extern crate lazy_static;
 pub mod chain;
 pub mod config;
 pub mod daemon;
+pub mod meowcoin;
 pub mod electrum;
 pub mod errors;
 pub mod metrics;
