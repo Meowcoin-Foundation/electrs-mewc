@@ -1,8 +1,8 @@
-# Esplora - Electrs backend API
+# Esplora - Electrs backend API (Meowcoin fork)
 
-A block chain index engine and HTTP API written in Rust based on [romanz/electrs](https://github.com/romanz/electrs).
+A block chain index engine and HTTP API written in Rust based on [romanz/electrs](https://github.com/romanz/electrs), forked from [Blockstream/electrs](https://github.com/Blockstream/electrs) and adapted for [Meowcoin](https://mewccrypto.com) (Meowcoin Apex v30.2+).
 
-Used as the backend for the [Esplora block explorer](https://github.com/Blockstream/esplora) powering [blockstream.info](https://blockstream.info/).
+Handles all three Meowcoin block formats: pre-KAWPOW (80-byte headers), KAWPOW/MEOWPOW (120-byte headers), and AuxPoW merge-mined blocks.
 
 API documentation [is available here](https://github.com/blockstream/esplora/blob/master/API.md).
 
@@ -10,25 +10,19 @@ Documentation for the database schema and indexing process [is available here](d
 
 ### Installing & indexing
 
-Install Rust, Bitcoin Core (no `txindex` needed) and the `clang` and `cmake` packages, increase maximum number open files by `ulimit -n 100000` and then:
+Install Rust, Meowcoin Apex (no `txindex` needed) and the `clang` and `pkg-config` packages, increase maximum number of open files by `ulimit -n 100000` and then:
 
 ```bash
-$ git clone https://github.com/blockstream/electrs && cd electrs
-$ git checkout new-index
-$ cargo run --release --bin electrs -- -vvvv --daemon-dir ~/.bitcoin
-
-# Or for liquid:
-$ cargo run --features liquid --release --bin electrs -- -vvvv --network liquid --daemon-dir ~/.liquid
+$ git clone https://github.com/Meowcoin-Foundation/electrs-mewc && cd electrs-mewc
+$ cargo build --release
+$ ./target/release/electrs --network mainnet --jsonrpc-import --daemon-rpc-addr 127.0.0.1:8332 --cookie "rpcuser:rpcpassword" -vvvv
 ```
 
-See [electrs's original documentation](https://github.com/romanz/electrs/blob/master/doc/usage.md) for more detailed instructions.
-Note that our indexes are incompatible with electrs's and has to be created separately.
+> **Note:** Only `--jsonrpc-import` mode is supported. Direct blk*.dat file parsing is not available due to Meowcoin's variable-size block headers.
 
-The indexes require 610GB of storage after running compaction (as of June 2020), but you'll need to have
-free space of about double that available during the index compaction process.
-Creating the indexes should take a few hours on a beefy machine with SSD.
+The indexes require significant storage (scale with chain size). Creating the full index from scratch takes several hours on a machine with SSD.
 
-To deploy with Docker, follow the [instructions here](https://github.com/Blockstream/esplora#how-to-build-the-docker-image).
+Prebuilt Linux x86_64 binaries are available on the [releases page](../../releases).
 
 ### Light mode
 
@@ -55,8 +49,7 @@ but instead queried from bitcoind on demand.
   With these new indexes, bitcoind is no longer queried to serve user requests and is only polled
   periodically for new blocks and for syncing the mempool.
 
-- Support for Liquid and other Elements-based networks, including CT, peg-in/out and multi-asset.
-  (requires enabling the `liquid` feature flag using `--features liquid`)
+- Meowcoin-native address encoding for all address types (P2PKH, P2SH, P2WPKH, P2WSH, P2TR) using Meowcoin's version bytes and bech32 HRPs (`mewc`/`tmewc`).
 
 ### CLI options
 
@@ -71,14 +64,11 @@ In addition to electrs's original configuration options, a few new options are a
 - `--electrum-txs-limit <num>` - maximum number of txs to return per address in the electrum server (does not apply for the http api).
 - `--electrum-banner <text>` - welcome banner text for electrum server.
 
-Additional options with the `liquid` feature:
-- `--parent-network <network>` - the parent network this chain is pegged to.
-
 Additional options with the `electrum-discovery` feature:
 - `--electrum-hosts <json>` - a json map of the public hosts where the electrum server is reachable, in the [`server.features` format](https://electrumx.readthedocs.io/en/latest/protocol-methods.html#server.features).
 - `--electrum-announce` - announce the electrum server on the electrum p2p server discovery network.
 
-See `$ cargo run --release --bin electrs -- --help` for the full list of options.
+See `$ ./target/release/electrs --help` for the full list of options.
 
 ## License
 
