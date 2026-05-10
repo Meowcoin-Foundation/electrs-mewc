@@ -166,10 +166,18 @@ impl Query {
 
         obj.insert("hex".to_string(), serde_json::Value::String(hex));
 
-        // Confirmed transactions get the four block-context fields populated
-        // from the local index. Mempool transactions get them omitted, which is
+        // Confirmed transactions get the block-context fields populated from
+        // the local index. Mempool transactions get them omitted, which is
         // exactly what bitcoind's `getrawtransaction <txid> true` does for
         // unconfirmed txs.
+        //
+        // Note on `height`: this field is NOT part of standard bitcoind
+        // `getrawtransaction` output, but ElectrumX Meowcoin (the existing
+        // public reference server, e.g. electrum.mewccrypto.com) injects it
+        // alongside the other block-context fields. Clients targeting the
+        // Meowcoin Electrum endpoints (KDF and others) may rely on it, so we
+        // mirror that behavior to keep the response shape parity-checked
+        // against the reference server.
         if let Some(blockid) = self.chain.tx_confirming_block(txid) {
             let best_height = self.chain.best_height();
             // Defensive: if for any reason height > best_height (mid-reorg
@@ -181,6 +189,10 @@ impl Query {
             obj.insert(
                 "blockhash".to_string(),
                 serde_json::Value::String(blockid.hash.to_string()),
+            );
+            obj.insert(
+                "height".to_string(),
+                serde_json::Value::Number((blockid.height as u64).into()),
             );
             obj.insert(
                 "confirmations".to_string(),
