@@ -33,6 +33,33 @@ With this option set, raw transactions and metadata associated with blocks will 
 (the `T`, `X` and `M` indexes),
 but instead queried from bitcoind on demand.
 
+### Verbose transactions (`blockchain.transaction.get verbose=true`)
+
+By default, the Electrum method `blockchain.transaction.get` with `verbose=true`
+returns `"verbose transactions are currently unsupported"`, matching upstream
+electrs-esplora behavior. Some clients (notably the
+Komodo DeFi Framework / Gleec
+during atomic-swap validation) require a verbose response and will hang
+otherwise.
+
+Pass `--enable-verbose-transactions` to serve a verbose response. The flow is:
+
+1. Read the raw transaction hex from the local index.
+2. Send it to meowcoind via the `decoderawtransaction` JSON-RPC. This is a
+   stateless decode and does **not** require `txindex` on the daemon (which is
+   why this works alongside `--jsonrpc-import` against a normal full node).
+3. Augment the daemon's response with `hex`, and — for confirmed transactions —
+   `blockhash`, `confirmations`, `time`, and `blocktime`, sourced from the local
+   index. The result matches the shape of `getrawtransaction <txid> true` that
+   ElectrumX would return.
+
+For unconfirmed (mempool) transactions, the four block-context fields are
+omitted, matching meowcoind's own behavior.
+
+The flag is off by default to preserve historical behavior; turn it on if you
+operate a public Electrum endpoint that needs to serve KDF clients or anything
+else that depends on verbose responses.
+
 ### Notable changes from Electrs:
 
 - HTTP REST API in addition to the Electrum JSON-RPC protocol, with extended transaction information
@@ -63,6 +90,7 @@ In addition to electrs's original configuration options, a few new options are a
 - `--utxos-limit <num>` - maximum number of utxos to return per address.
 - `--electrum-txs-limit <num>` - maximum number of txs to return per address in the electrum server (does not apply for the http api).
 - `--electrum-banner <text>` - welcome banner text for electrum server.
+- `--enable-verbose-transactions` - serve `blockchain.transaction.get` with `verbose=true` by proxying through `decoderawtransaction` on the daemon (does not require `txindex`). Off by default. See [Verbose transactions](#verbose-transactions-blockchaintransactionget-verbosetrue) above.
 
 Additional options with the `electrum-discovery` feature:
 - `--electrum-hosts <json>` - a json map of the public hosts where the electrum server is reachable, in the [`server.features` format](https://electrumx.readthedocs.io/en/latest/protocol-methods.html#server.features).

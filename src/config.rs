@@ -29,6 +29,12 @@ pub struct Config {
     pub http_socket_file: Option<PathBuf>,
     pub monitoring_addr: SocketAddr,
     pub jsonrpc_import: bool,
+    /// When enabled, `blockchain.transaction.get` with `verbose=true` is served by
+    /// proxying through `decoderawtransaction` on the daemon (which does NOT require
+    /// `txindex`) and augmenting the result with chain context from the local index.
+    /// Off by default to preserve the existing "verbose transactions are currently
+    /// unsupported" behavior.
+    pub enable_verbose_transactions: bool,
     pub light_mode: bool,
     pub address_search: bool,
     pub index_unspendables: bool,
@@ -172,6 +178,11 @@ impl Config {
                 Arg::with_name("jsonrpc_import")
                     .long("jsonrpc-import")
                     .help("Use JSONRPC instead of directly importing blk*.dat files. Useful for remote full node or low memory system"),
+            )
+            .arg(
+                Arg::with_name("enable_verbose_transactions")
+                    .long("enable-verbose-transactions")
+                    .help("Serve `blockchain.transaction.get` with verbose=true by proxying through `decoderawtransaction` on the daemon. Does NOT require txindex. Off by default."),
             )
             .arg(
                 Arg::with_name("light_mode")
@@ -412,6 +423,7 @@ impl Config {
             http_socket_file,
             monitoring_addr,
             jsonrpc_import: m.is_present("jsonrpc_import"),
+            enable_verbose_transactions: m.is_present("enable_verbose_transactions"),
             light_mode: m.is_present("light_mode"),
             address_search: m.is_present("address_search"),
             index_unspendables: m.is_present("index_unspendables"),

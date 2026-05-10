@@ -383,8 +383,17 @@ impl Connection {
             None => false,
         };
 
-        // FIXME: implement verbose support
         if verbose {
+            // Verbose responses are gated behind --enable-verbose-transactions and
+            // are only implemented for the non-liquid build (the meowcoin fork).
+            // When the flag is off, preserve the historical "unsupported" error so
+            // existing client behavior is unchanged.
+            #[cfg(not(feature = "liquid"))]
+            {
+                if self.query.config().enable_verbose_transactions {
+                    return self.query.lookup_verbose_txn(&tx_hash);
+                }
+            }
             bail!("verbose transactions are currently unsupported");
         }
 

@@ -684,6 +684,16 @@ impl Daemon {
         self.request("getrawtransaction", json!([txid, verbose, blockhash]))
     }
 
+    /// Stateless RPC: parses the given raw transaction hex into its structural JSON
+    /// representation. Unlike `getrawtransaction`, this does NOT require `txindex` on
+    /// the daemon, which makes it the right fit for serving Electrum
+    /// `blockchain.transaction.get verbose=true` responses when we already have the
+    /// raw hex in our local index.
+    #[trace]
+    pub fn decoderawtransaction(&self, txhex: &str) -> Result<Value> {
+        self.request("decoderawtransaction", json!([txhex]))
+    }
+
     #[trace]
     pub fn getmempooltx(&self, txhash: &Txid) -> Result<Transaction> {
         let value = self.request("getrawtransaction", json!([txhash, /*verbose=*/ false]))?;

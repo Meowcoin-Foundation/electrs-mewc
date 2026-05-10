@@ -135,6 +135,70 @@ impl Query {
             .or_else(|| self.mempool().lookup_raw_txn(txid))
     }
 
+    /// Build the verbose transaction response expected by Electrum clients
+    /// (`blockchain.transaction.get` with `verbose=true`).
+    ///
+    /// Strategy: pull the raw hex from our local index and ask the daemon to
+    /// decode it via `decoderawtransaction`. This deliberately avoids
+    /// `getrawtransaction`, which would require `txindex` on the daemon.
+    ///
+    /// We then augment the daemon's structural decoding with chain context that
+    /// the daemon cannot provide statelessly (`hex`, `blockhash`,
+    /// `confirmations`, `time`, `blocktime`), to match the response shape that
+    /// `getrawtransaction <txid> true` would have returned.
+    ///
+    /// For unconfirmed (mempool) transactions we omit the four block-info
+    /// fields, matching bitcoind's own behavior in that case.
+    #[cfg(not(feature = "liquid"))]
+    #[trace]
+    pub fn lookup_verbose_txn(&self, txid: &Txid) -> Result<serde_json::Value> {
+        use bitcoin::hex::DisplayHex;
+
+        let rawtx = self
+            .lookup_raw_txn(txid)
+            .chain_err(|| "missing transaction")?;
+        let hex = rawtx.to_lower_hex_string();
+
+        let mut decoded = self.daemon.decoderawtransaction(&hex)?;
+        let obj = decoded
+            .as_object_mut()
+            .chain_err(|| "decoderawtransaction returned non-object")?;
+
+        obj.insert("hex".to_string(), serde_json::Value::String(hex));
+
+        // Confirmed transactions get the four block-context fields populated
+        // from the local index. Mempool transactions get them omitted, which is
+        // exactly what bitcoind's `getrawtransaction <txid> true` does for
+        // unconfirmed txs.
+        if let Some(blockid) = self.chain.tx_confirming_block(txid) {
+            let best_height = self.chain.best_height();
+            // Defensive: if for any reason height > best_height (mid-reorg
+            // window), fall back to 1 confirmation rather than panicking on
+            // the underflow.
+            let confirmations = best_height
+                .saturating_sub(blockid.height)
+                .saturating_add(1) as u32;
+            obj.insert(
+                "blockhash".to_string(),
+                serde_json::Value::String(blockid.hash.to_string()),
+            );
+            obj.insert(
+                "confirmations".to_string(),
+                serde_json::Value::Number(confirmations.into()),
+            );
+            obj.insert(
+                "time".to_string(),
+                serde_json::Value::Number(blockid.time.into()),
+            );
+            obj.insert(
+                "blocktime".to_string(),
+                serde_json::Value::Number(blockid.time.into()),
+            );
+        }
+
+        Ok(decoded)
+    }
+
     #[trace]
     pub fn lookup_txos(&self, outpoints: BTreeSet<OutPoint>) -> HashMap<OutPoint, TxOut> {
         // the mempool lookup_txos() internally looks up confirmed txos as well
