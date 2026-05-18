@@ -136,6 +136,22 @@ struct NetworkInfo {
     relayfee: f64, // in BTC/kB
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct PeerInfo {
+    pub addr: String,
+    pub subver: String,
+    pub version: u64,
+    pub inbound: bool,
+    // -1 when the peer hasn't announced a tip yet
+    #[serde(default)]
+    pub synced_headers: i64,
+    #[serde(default)]
+    pub synced_blocks: i64,
+    #[serde(default)]
+    pub conntime: u64,
+    pub pingtime: Option<f64>,
+}
+
 #[derive(Serialize, Deserialize, Debug)]
 struct MempoolFeesSubmitPackage {
     base: f64,
@@ -560,6 +576,12 @@ impl Daemon {
     fn getnetworkinfo(&self) -> Result<NetworkInfo> {
         let info: Value = self.request("getnetworkinfo", json!([]))?;
         Ok(from_value(info).chain_err(|| "invalid network info")?)
+    }
+
+    #[trace]
+    pub fn getpeerinfo(&self) -> Result<Vec<PeerInfo>> {
+        let info: Value = self.request("getpeerinfo", json!([]))?;
+        Ok(from_value(info).chain_err(|| "invalid peer info")?)
     }
 
     #[trace]

@@ -49,11 +49,12 @@ Pass `--enable-verbose-transactions` to serve a verbose response. The flow is:
    stateless decode and does **not** require `txindex` on the daemon (which is
    why this works alongside `--jsonrpc-import` against a normal full node).
 3. Augment the daemon's response with `hex`, and — for confirmed transactions —
-   `blockhash`, `confirmations`, `time`, and `blocktime`, sourced from the local
-   index. The result matches the shape of `getrawtransaction <txid> true` that
-   ElectrumX would return.
+   `blockhash`, `height`, `confirmations`, `time`, and `blocktime`, sourced from
+   the local index. The result matches the shape that ElectrumX Meowcoin
+   returns from `electrum.mewccrypto.com` (i.e. what existing Meowcoin Electrum
+   clients including KDF already expect).
 
-For unconfirmed (mempool) transactions, the four block-context fields are
+For unconfirmed (mempool) transactions, the five block-context fields are
 omitted, matching meowcoind's own behavior.
 
 The flag is off by default to preserve historical behavior; turn it on if you

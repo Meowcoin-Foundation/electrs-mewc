@@ -1130,6 +1130,10 @@ fn handle_request(
             json_response(query.estimate_fee_map(), TTL_SHORT)
         }
 
+        (&Method::GET, Some(&"peers"), None, None, None, None) => {
+            json_response(query.get_peers()?, TTL_SHORT)
+        }
+
         #[cfg(feature = "liquid")]
         (&Method::GET, Some(&"assets"), Some(&"registry"), None, None, None) => {
             let start_index: usize = query_params

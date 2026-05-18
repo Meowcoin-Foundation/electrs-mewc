@@ -4,7 +4,7 @@ use std::time::{Duration, Instant};
 
 use crate::chain::{Network, OutPoint, Transaction, TxOut, Txid};
 use crate::config::Config;
-use crate::daemon::{Daemon, SubmitPackageResult};
+use crate::daemon::{Daemon, PeerInfo, SubmitPackageResult};
 use crate::errors::*;
 use crate::new_index::{ChainQuery, Mempool, ScriptStats, SpendingInput, Utxo};
 use crate::util::{is_spendable, BlockId, Bytes, TransactionStatus};
@@ -18,6 +18,7 @@ use crate::{
 };
 
 const FEE_ESTIMATES_TTL: u64 = 60; // seconds
+const PEERS_TTL: u64 = 21_600; // 6 hours
 
 const CONF_TARGETS: [u16; 28] = [
     1u16, 2u16, 3u16, 4u16, 5u16, 6u16, 7u16, 8u16, 9u16, 10u16, 11u16, 12u16, 13u16, 14u16, 15u16,
@@ -31,6 +32,7 @@ pub struct Query {
     config: Arc<Config>,
     cached_estimates: RwLock<(HashMap<u16, f64>, Option<Instant>)>,
     cached_relayfee: RwLock<Option<f64>>,
+    cached_peers: RwLock<(Vec<PeerInfo>, Option<Instant>)>,
     #[cfg(feature = "liquid")]
     asset_db: Option<Arc<RwLock<AssetRegistry>>>,
 }
@@ -50,6 +52,7 @@ impl Query {
             config,
             cached_estimates: RwLock::new((HashMap::new(), None)),
             cached_relayfee: RwLock::new(None),
+            cached_peers: RwLock::new((vec![], None)),
         }
     }
 
@@ -327,6 +330,33 @@ impl Query {
         Ok(relayfee)
     }
 
+    #[trace]
+    pub fn get_peers(&self) -> Result<Vec<PeerInfo>> {
+        {
+            let cached = self.cached_peers.read().unwrap();
+            if let Some(ts) = cached.1 {
+                if ts.elapsed() < Duration::from_secs(PEERS_TTL) {
+                    return Ok(cached.0.clone());
+                }
+            }
+        }
+        match self.daemon.getpeerinfo() {
+            Ok(peers) => {
+                *self.cached_peers.write().unwrap() = (peers.clone(), Some(Instant::now()));
+                Ok(peers)
+            }
+            Err(e) => {
+                let cached = self.cached_peers.read().unwrap();
+                if !cached.0.is_empty() {
+                    warn!("getpeerinfo failed, serving stale cache: {:?}", e);
+                    Ok(cached.0.clone())
+                } else {
+                    Err(e)
+                }
+            }
+        }
+    }
+
     #[cfg(feature = "liquid")]
     pub fn new(
         chain: Arc<ChainQuery>,
@@ -343,6 +373,7 @@ impl Query {
             asset_db,
             cached_estimates: RwLock::new((HashMap::new(), None)),
             cached_relayfee: RwLock::new(None),
+            cached_peers: RwLock::new((vec![], None)),
         }
     }
 
