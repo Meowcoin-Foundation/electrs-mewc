@@ -18,7 +18,7 @@ use crate::{
 };
 
 const FEE_ESTIMATES_TTL: u64 = 60; // seconds
-const PEERS_TTL: u64 = 21_600; // 6 hours
+const PEERS_TTL: u64 = 1_800; // 30 minutes
 
 const CONF_TARGETS: [u16; 28] = [
     1u16, 2u16, 3u16, 4u16, 5u16, 6u16, 7u16, 8u16, 9u16, 10u16, 11u16, 12u16, 13u16, 14u16, 15u16,
